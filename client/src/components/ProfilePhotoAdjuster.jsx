@@ -45,38 +45,37 @@ function ProfilePhotoAdjuster({ imageSrc, onApply, onCancel }) {
 
   // Compute base dimensions when fitting into the 240px circle
   const getRenderDimensions = useCallback(() => {
-    const { width: natW, height: natH } = imgNaturalSize;
-    if (!natW || !natH) return { width: CROP_DIAMETER, height: CROP_DIAMETER };
-
-    const isRotated = rotation === 90 || rotation === 270;
-    const effectiveW = isRotated ? natH : natW;
-    const effectiveH = isRotated ? natW : natH;
+    const natW = imgNaturalSize.width || 240;
+    const natH = imgNaturalSize.height || 240;
 
     // Minimum side covers the circle
-    const baseScale = CROP_DIAMETER / Math.min(effectiveW, effectiveH);
-    const renderW = effectiveW * baseScale * scale;
-    const renderH = effectiveH * baseScale * scale;
+    const baseScale = CROP_DIAMETER / Math.min(natW, natH);
+    const renderW = natW * baseScale * scale;
+    const renderH = natH * baseScale * scale;
 
     return { renderW, renderH, natW, natH };
-  }, [imgNaturalSize, rotation, scale]);
+  }, [imgNaturalSize, scale]);
 
   // Keep pan bounded inside the circle so there are no empty gaps
   const clampPan = useCallback(
     (newX, newY, currentScale = scale) => {
       const { renderW, renderH } = getRenderDimensions();
-      // When scale changes, renderW changes
       const currentW = (renderW / scale) * currentScale;
       const currentH = (renderH / scale) * currentScale;
 
-      const maxX = Math.max(0, (currentW - CROP_DIAMETER) / 2);
-      const maxY = Math.max(0, (currentH - CROP_DIAMETER) / 2);
+      const isRotated = rotation === 90 || rotation === 270;
+      const visualW = isRotated ? currentH : currentW;
+      const visualH = isRotated ? currentW : currentH;
+
+      const maxX = Math.max(0, (visualW - CROP_DIAMETER) / 2);
+      const maxY = Math.max(0, (visualH - CROP_DIAMETER) / 2);
 
       return {
         x: Math.max(-maxX, Math.min(maxX, newX)),
         y: Math.max(-maxY, Math.min(maxY, newY)),
       };
     },
-    [getRenderDimensions, scale]
+    [getRenderDimensions, rotation, scale]
   );
 
   // MOUSE & POINTER DRAG
@@ -165,9 +164,17 @@ function ProfilePhotoAdjuster({ imageSrc, onApply, onCancel }) {
 
   // RENDER FINAL CROP ONTO 360x360 CANVAS
   function handleConfirmCrop() {
-    const { natW, natH } = imgNaturalSize;
-    if (!natW || !natH || !imageSrc) {
+    if (!imageSrc) {
       onCancel();
+      return;
+    }
+
+    const natW = imgNaturalSize.width || imgRef.current?.naturalWidth || imgRef.current?.width || 0;
+    const natH = imgNaturalSize.height || imgRef.current?.naturalHeight || imgRef.current?.height || 0;
+
+    // Safety fallback: if natural dimensions aren't ready, apply source directly so photo is NEVER dropped
+    if (!natW || !natH) {
+      onApply(imageSrc);
       return;
     }
 
@@ -178,7 +185,7 @@ function ProfilePhotoAdjuster({ imageSrc, onApply, onCancel }) {
     const ctx = canvas.getContext("2d");
 
     if (!ctx) {
-      onCancel();
+      onApply(imageSrc);
       return;
     }
 
@@ -202,32 +209,44 @@ function ProfilePhotoAdjuster({ imageSrc, onApply, onCancel }) {
     ctx.save();
     // Center of canvas
     ctx.translate(TARGET_SIZE / 2, TARGET_SIZE / 2);
-    // User Pan
+    // User Pan (scaled to target canvas)
     ctx.translate(pan.x * multiplier, pan.y * multiplier);
     // Rotation
     ctx.rotate((rotation * Math.PI) / 180);
 
-    const isRotated = rotation === 90 || rotation === 270;
-    const effectiveW = isRotated ? natH : natW;
-    const effectiveH = isRotated ? natW : natH;
-    const baseScale = CROP_DIAMETER / Math.min(effectiveW, effectiveH);
+    const baseScale = CROP_DIAMETER / Math.min(natW, natH);
     const finalDrawW = natW * baseScale * scale * multiplier;
     const finalDrawH = natH * baseScale * scale * multiplier;
 
     const img = imgRef.current;
-    if (img && img.complete) {
+    if (img && img.complete && img.naturalWidth) {
       ctx.drawImage(img, -finalDrawW / 2, -finalDrawH / 2, finalDrawW, finalDrawH);
+    } else {
+      const tempImg = new Image();
+      tempImg.onload = () => {
+        ctx.drawImage(tempImg, -finalDrawW / 2, -finalDrawH / 2, finalDrawW, finalDrawH);
+        ctx.restore();
+        try {
+          const croppedData = canvas.toDataURL("image/jpeg", 0.88);
+          onApply(croppedData);
+        } catch {
+          onApply(imageSrc);
+        }
+      };
+      tempImg.onerror = () => onApply(imageSrc);
+      tempImg.src = imageSrc;
+      return;
     }
 
     ctx.restore();
 
-    // Export optimized, clean JPEG
+    // Export optimized, clean JPEG (~25-35KB)
     try {
       const croppedData = canvas.toDataURL("image/jpeg", 0.88);
       onApply(croppedData);
     } catch (err) {
-      console.warn("Failed to generate cropped data URL", err);
-      onCancel();
+      console.warn("Failed to generate cropped data URL, falling back to source", err);
+      onApply(imageSrc);
     }
   }
 
@@ -287,7 +306,7 @@ function ProfilePhotoAdjuster({ imageSrc, onApply, onCancel }) {
               style={{
                 width: `${renderW}px`,
                 height: `${renderH}px`,
-                transform: `translate(${pan.x}px, ${pan.y}px) rotate(${rotation}deg)`,
+                transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px)) rotate(${rotation}deg)`,
               }}
             />
 

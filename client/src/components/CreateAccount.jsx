@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import ProfilePhotoAdjuster from "./ProfilePhotoAdjuster";
 
 const RANDOM_HANDLES = [
@@ -54,6 +54,25 @@ function CreateAccount({ initialUser, onSave, onClose }) {
   const fileInputRef = useRef(null);
   const videoRef = useRef(null);
 
+  // Ensure video element receives camera stream when selfie viewfinder opens
+  useEffect(() => {
+    if (isSelfieMode && selfieStream && videoRef.current) {
+      videoRef.current.srcObject = selfieStream;
+      videoRef.current.play().catch((err) => {
+        console.warn("Selfie video autoplay failed", err);
+      });
+    }
+  }, [isSelfieMode, selfieStream]);
+
+  // Clean up camera stream tracks on unmount
+  useEffect(() => {
+    return () => {
+      if (selfieStream) {
+        selfieStream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [selfieStream]);
+
   // Quick 1-tap random handle generator
   function rollRandomHandle() {
     const randomHandle = RANDOM_HANDLES[Math.floor(Math.random() * RANDOM_HANDLES.length)];
@@ -107,34 +126,46 @@ function CreateAccount({ initialUser, onSave, onClose }) {
         audio: false,
       });
       setSelfieStream(stream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
     } catch (err) {
       console.warn("Selfie camera unavailable", err);
+      alert("Unable to access front camera. Please check camera permissions in your browser.");
       setIsSelfieMode(false);
     }
   }
 
   function snapSelfie() {
     const video = videoRef.current;
-    if (video && video.readyState >= 2) {
-      const rawSize = Math.min(video.videoWidth, video.videoHeight);
-      const canvas = document.createElement("canvas");
-      canvas.width = rawSize;
-      canvas.height = rawSize;
-      const ctx = canvas.getContext("2d");
+    if (!video) {
+      stopSelfieStream();
+      return;
+    }
 
+    const vWidth = video.videoWidth || 640;
+    const vHeight = video.videoHeight || 480;
+    const rawSize = Math.min(vWidth, vHeight);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = rawSize;
+    canvas.height = rawSize;
+    const ctx = canvas.getContext("2d");
+
+    if (ctx) {
       // Center crop & mirror for selfie
       ctx.translate(rawSize, 0);
       ctx.scale(-1, 1);
-      const startX = (video.videoWidth - rawSize) / 2;
-      const startY = (video.videoHeight - rawSize) / 2;
-      ctx.drawImage(video, startX, startY, rawSize, rawSize, 0, 0, rawSize, rawSize);
+      const startX = Math.max(0, (vWidth - rawSize) / 2);
+      const startY = Math.max(0, (vHeight - rawSize) / 2);
 
-      const capturedData = canvas.toDataURL("image/jpeg", 0.95);
-      setImageToAdjust(capturedData);
+      try {
+        ctx.drawImage(video, startX, startY, rawSize, rawSize, 0, 0, rawSize, rawSize);
+        const capturedData = canvas.toDataURL("image/jpeg", 0.92);
+        // Automatically open adjuster so user can zoom and align their face in the circle
+        setImageToAdjust(capturedData);
+      } catch (err) {
+        console.warn("Failed to capture selfie frame", err);
+      }
     }
+
     stopSelfieStream();
   }
 
@@ -262,11 +293,10 @@ function CreateAccount({ initialUser, onSave, onClose }) {
                 >
                   <img
                     src={avatar}
-                    alt=""
+                    alt="Profile preview"
                     className="avatar-large-preview"
-                    onError={() => {
-                      console.warn("Avatar failed to render, resetting to null");
-                      setAvatar(null);
+                    onError={(e) => {
+                      console.warn("Avatar preview failed to load", e);
                     }}
                   />
                   <button
@@ -346,9 +376,9 @@ function CreateAccount({ initialUser, onSave, onClose }) {
               <button
                 type="button"
                 className="avatar-action-btn"
-                onClick={startSelfieCapture}
+                onClick={isSelfieMode ? stopSelfieStream : startSelfieCapture}
               >
-                <span>Live selfie 📸</span>
+                <span>{isSelfieMode ? "Cancel selfie ✕" : "Live selfie 📸"}</span>
               </button>
             </div>
           </div>
