@@ -4,6 +4,7 @@ import MomentComposer from "./components/MomentComposer";
 import Feed from "./components/Feed";
 import ProfileModal from "./components/ProfileModal";
 import CreateAccount from "./components/CreateAccount";
+import FloatingLines from "./components/FloatingLines";
 import "./styles/global.css";
 
 
@@ -106,165 +107,169 @@ function App() {
     setActiveScreen("feed");
   }
 
-  // Active Camera overlay takes full screen precedence
-  if (cameraOpen) {
-    return (
-      <Camera
-        onClose={() => setCameraOpen(false)}
-        onUseMoment={handleUseMoment}
-      />
-    );
-  }
-
-  // Active Composer overlay takes full screen precedence
-  if (composerOpen) {
-    return (
-      <MomentComposer
-        image={capturedImage}
-        currentUser={currentUser}
-        onClose={handleCloseComposer}
-        onPublish={handlePublishMoment}
-      />
-    );
-  }
-
-  // Create / Edit Account page
-  if (createAccountOpen) {
-    return (
-      <CreateAccount
-        initialUser={accountMode === "create" ? null : currentUser}
-        onSave={handleSaveAccount}
-        onClose={() => setCreateAccountOpen(false)}
-      />
-    );
-  }
-
   return (
-    <div className="app-shell">
-      {/* Feed View */}
-      {activeScreen === "feed" ? (
-        <Feed
-          moments={moments}
+    <div className="app-root">
+      {/* 3D Animated Floating Lines Background for All Pages */}
+      <div className="floating-lines-bg-fixed" aria-hidden="true">
+        <FloatingLines
+          enabledWaves={["top", "middle", "bottom"]}
+          lineCount={[6, 8, 7]}
+          lineDistance={[5, 4, 6]}
+          animationSpeed={0.8}
+          interactive={true}
+          bendRadius={5.0}
+          bendStrength={-0.5}
+          parallax={true}
+          parallaxStrength={0.2}
+        />
+      </div>
+
+      {cameraOpen ? (
+        <Camera
+          onClose={() => setCameraOpen(false)}
+          onUseMoment={handleUseMoment}
+        />
+      ) : composerOpen ? (
+        <MomentComposer
+          image={capturedImage}
           currentUser={currentUser}
-          onOpenCapture={() => setCameraOpen(true)}
-          onOpenProfile={() => setProfileOpen(true)}
-          onOpenAccount={() => {
-            setAccountMode(currentUser ? "edit" : "create");
-            setCreateAccountOpen(true);
-          }}
-          onBackHome={() => setActiveScreen("home")}
+          onClose={handleCloseComposer}
+          onPublish={handlePublishMoment}
+        />
+      ) : createAccountOpen ? (
+        <CreateAccount
+          initialUser={accountMode === "create" ? null : currentUser}
+          onSave={handleSaveAccount}
+          onClose={() => setCreateAccountOpen(false)}
         />
       ) : (
-        /* Home Landing Screen (Matches page 1 of PDF) */
-        <main className="irl">
-          <header className="irl-header">
-            <span className="irl-live-pill">
-              <span className="pulse-dot" /> LIVE
-            </span>
+        <div className="app-shell">
+          {/* Feed View */}
+          {activeScreen === "feed" ? (
+            <Feed
+              moments={moments}
+              currentUser={currentUser}
+              onOpenCapture={() => setCameraOpen(true)}
+              onOpenProfile={() => setProfileOpen(true)}
+              onOpenAccount={() => {
+                setAccountMode(currentUser ? "edit" : "create");
+                setCreateAccountOpen(true);
+              }}
+              onBackHome={() => setActiveScreen("home")}
+            />
+          ) : (
+            /* Home Landing Screen (Matches page 1 of PDF) */
+            <main className="irl">
+              <header className="irl-header">
+                <span className="irl-live-pill">
+                  <span className="pulse-dot" /> LIVE
+                </span>
 
-            <div className="irl-nav-right">
-              {currentUser ? (
-                <button
-                  className="irl-account-chip-btn"
-                  onClick={() => setProfileOpen(true)}
-                  title={`View ${currentUser.displayName || currentUser.username}'s profile`}
-                >
-                  <span className="nav-avatar-wrap">
-                    {currentUser.avatar && (
-                      <img
-                        src={currentUser.avatar}
-                        alt=""
-                        className="nav-avatar-circle"
-                        onError={(e) => {
-                          e.currentTarget.style.display = "none";
-                          const fb = e.currentTarget.parentElement?.querySelector(".nav-avatar-circle-placeholder");
-                          if (fb) fb.style.display = "inline-flex";
-                        }}
-                      />
-                    )}
-                    <span
-                      className="nav-avatar-circle-placeholder"
-                      style={{ display: currentUser.avatar ? "none" : "inline-flex" }}
+                <div className="irl-nav-right">
+                  {currentUser ? (
+                    <button
+                      className="irl-account-chip-btn"
+                      onClick={() => setProfileOpen(true)}
+                      title={`View ${currentUser.displayName || currentUser.username}'s profile`}
                     >
-                      {(currentUser.displayName || currentUser.username || "U")[0]?.toUpperCase() || "U"}
-                    </span>
-                  </span>
-                  <span className="nav-handle">
-                    {currentUser.displayName || `@${currentUser.username}`}
-                  </span>
-                </button>
-              ) : (
+                      <span className="nav-avatar-wrap">
+                        {currentUser.avatar && (
+                          <img
+                            src={currentUser.avatar}
+                            alt=""
+                            className="nav-avatar-circle"
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                              const fb = e.currentTarget.parentElement?.querySelector(".nav-avatar-circle-placeholder");
+                              if (fb) fb.style.display = "inline-flex";
+                            }}
+                          />
+                        )}
+                        <span
+                          className="nav-avatar-circle-placeholder"
+                          style={{ display: currentUser.avatar ? "none" : "inline-flex" }}
+                        >
+                          {(currentUser.displayName || currentUser.username || "U")[0]?.toUpperCase() || "U"}
+                        </span>
+                      </span>
+                      <span className="nav-handle">
+                        {currentUser.displayName || `@${currentUser.username}`}
+                      </span>
+                    </button>
+                  ) : (
+                    <button
+                      className="irl-create-profile-btn"
+                      onClick={() => {
+                        setAccountMode("create");
+                        setCreateAccountOpen(true);
+                      }}
+                      title="Create your profile"
+                    >
+                      <span className="nav-plus">+</span>
+                      <span className="nav-handle">create profile</span>
+                    </button>
+                  )}
+
+                  <button
+                    className="irl-feed-link"
+                    onClick={() => setActiveScreen("feed")}
+                    title="View live feed"
+                  >
+                    feed <span>→</span>
+                  </button>
+                </div>
+              </header>
+
+              <section className="hero">
+                <p className="eyebrow">IN REAL LIFE</p>
+                <h1>right now.</h1>
+
                 <button
-                  className="irl-create-profile-btn"
-                  onClick={() => {
-                    setAccountMode("create");
-                    setCreateAccountOpen(true);
-                  }}
-                  title="Create your profile"
+                  className="capture-button"
+                  onClick={() => setCameraOpen(true)}
+                  aria-label="Capture a moment"
                 >
-                  <span className="nav-plus">+</span>
-                  <span className="nav-handle">create profile</span>
+                  <span>+</span>
                 </button>
-              )}
 
-              <button
-                className="irl-feed-link"
-                onClick={() => setActiveScreen("feed")}
-                title="View live feed"
-              >
-                feed <span>→</span>
-              </button>
-            </div>
-          </header>
+                <p className="capture-label">capture a moment</p>
+                <span className="capture-sub-rule">unfiltered • live camera only</span>
+              </section>
 
-          <section className="hero">
-            <p className="eyebrow">IN REAL LIFE</p>
-            <h1>right now.</h1>
+              <footer className="irl-footer">
+                <button
+                  className="today-button"
+                  onClick={() => setActiveScreen("feed")}
+                >
+                  today I...
+                </button>
+              </footer>
+            </main>
+          )}
 
-            <button
-              className="capture-button"
-              onClick={() => setCameraOpen(true)}
-              aria-label="Capture a moment"
-            >
-              <span>+</span>
-            </button>
-
-            <p className="capture-label">capture a moment</p>
-            <span className="capture-sub-rule">unfiltered • live camera only</span>
-          </section>
-
-          <footer className="irl-footer">
-            <button
-              className="today-button"
-              onClick={() => setActiveScreen("feed")}
-            >
-              today I...
-            </button>
-          </footer>
-        </main>
+          {/* Profile Sheet Modal (Pillar 4) */}
+          <ProfileModal
+            isOpen={profileOpen}
+            currentUser={currentUser}
+            onClose={() => setProfileOpen(false)}
+            onEditProfile={() => {
+              setProfileOpen(false);
+              setAccountMode("edit");
+              setCreateAccountOpen(true);
+            }}
+            onNewProfile={() => {
+              setProfileOpen(false);
+              setAccountMode("create");
+              setCreateAccountOpen(true);
+            }}
+            onSwitchUser={(user) => {
+              handleSaveAccount(user);
+            }}
+            onLogout={handleLogout}
+            momentsCount={moments.length}
+          />
+        </div>
       )}
-
-      {/* Profile Sheet Modal (Pillar 4) */}
-      <ProfileModal
-        isOpen={profileOpen}
-        currentUser={currentUser}
-        onClose={() => setProfileOpen(false)}
-        onEditProfile={() => {
-          setProfileOpen(false);
-          setAccountMode("edit");
-          setCreateAccountOpen(true);
-        }}
-        onNewProfile={() => {
-          setProfileOpen(false);
-          setAccountMode("create");
-          setCreateAccountOpen(true);
-        }}
-        onSwitchUser={(user) => {
-          handleSaveAccount(user);
-        }}
-        onLogout={handleLogout}
-        momentsCount={moments.length}
-      />
     </div>
   );
 }
