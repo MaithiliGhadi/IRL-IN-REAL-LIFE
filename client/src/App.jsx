@@ -167,20 +167,31 @@ function App() {
                 <button
                   className="irl-account-chip-btn"
                   onClick={() => setProfileOpen(true)}
-                  title="Enter your profile"
+                  title={`View ${currentUser.displayName || currentUser.username}'s profile`}
                 >
-                  {currentUser.avatar ? (
-                    <img
-                      src={currentUser.avatar}
-                      alt={currentUser.displayName || currentUser.username}
-                      className="nav-avatar-circle"
-                    />
-                  ) : (
-                    <span className="nav-avatar-circle-placeholder">
+                  <span className="nav-avatar-wrap">
+                    {currentUser.avatar && (
+                      <img
+                        src={currentUser.avatar}
+                        alt=""
+                        className="nav-avatar-circle"
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                          const fb = e.currentTarget.parentElement?.querySelector(".nav-avatar-circle-placeholder");
+                          if (fb) fb.style.display = "inline-flex";
+                        }}
+                      />
+                    )}
+                    <span
+                      className="nav-avatar-circle-placeholder"
+                      style={{ display: currentUser.avatar ? "none" : "inline-flex" }}
+                    >
                       {(currentUser.displayName || currentUser.username || "U")[0]?.toUpperCase() || "U"}
                     </span>
-                  )}
-                  <span className="nav-handle">enter your profile</span>
+                  </span>
+                  <span className="nav-handle">
+                    {currentUser.displayName || `@${currentUser.username}`}
+                  </span>
                 </button>
               ) : (
                 <button

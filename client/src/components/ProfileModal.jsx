@@ -33,17 +33,24 @@ function ProfileModal({
         {/* User Profile Card Header */}
         <div className="profile-user-summary-card">
           <div className="profile-avatar-wrapper">
-            {currentUser?.avatar ? (
+            {currentUser?.avatar && (
               <img
                 src={currentUser.avatar}
-                alt={currentUser.displayName || currentUser.username || "Profile"}
+                alt=""
                 className="profile-user-avatar"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                  const fallback = e.currentTarget.parentElement?.querySelector(".profile-user-avatar-placeholder");
+                  if (fallback) fallback.style.display = "flex";
+                }}
               />
-            ) : (
-              <div className="profile-user-avatar-placeholder">
-                {(currentUser?.displayName || currentUser?.username || "U")[0]?.toUpperCase() || "U"}
-              </div>
             )}
+            <div
+              className="profile-user-avatar-placeholder"
+              style={{ display: currentUser?.avatar ? "none" : "flex" }}
+            >
+              {(currentUser?.displayName || currentUser?.username || "U")[0]?.toUpperCase() || "U"}
+            </div>
             <span className="profile-avatar-dot" />
           </div>
 

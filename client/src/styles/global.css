@@ -154,17 +154,34 @@ button {
   background: var(--bg-card);
 }
 
+.nav-avatar-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
 .nav-avatar-circle {
   width: 24px;
   height: 24px;
   border-radius: 50%;
   object-fit: cover;
+  display: block;
 }
 
 .nav-handle {
   font-size: 12px;
   font-weight: 700;
   color: var(--text-primary);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .irl-create-profile-btn {
@@ -1593,17 +1610,34 @@ button {
   background: var(--bg-card-hover);
 }
 
+.user-chip-avatar-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
 .user-chip-avatar {
   width: 24px;
   height: 24px;
   border-radius: 50%;
   object-fit: cover;
+  display: block;
 }
 
 .user-chip-handle {
   font-size: 13px;
   font-weight: 700;
   color: var(--text-primary);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .feed-create-profile-btn {
@@ -2056,6 +2090,8 @@ button {
   border-radius: 50%;
   object-fit: cover;
   border: 2px solid var(--border-strong);
+  overflow: hidden;
+  background: var(--bg-surface);
 }
 
 .profile-user-avatar-placeholder {
@@ -2095,12 +2131,14 @@ button {
   display: flex;
   align-items: baseline;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .profile-display-name {
   font-size: 16px;
   font-weight: 800;
   color: var(--text-primary);
+  word-break: break-word;
 }
 
 .profile-handle {
