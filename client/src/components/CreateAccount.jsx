@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import ProfilePhotoAdjuster from "./ProfilePhotoAdjuster";
 
 const RANDOM_HANDLES = [
   "campus_nomad",
@@ -27,74 +28,6 @@ function generateDefaultAvatar(name) {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
-// Client-side image compressor: downscales mobile/gallery photos to crisp 360x360 JPEG (~25KB)
-// Guarantees universal browser compatibility, instant rendering, and zero localStorage overflow
-function resizeAndCompressImage(file, targetDimension = 360, quality = 0.85) {
-  return new Promise((resolve) => {
-    if (!file) {
-      resolve(null);
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(file);
-    const img = new Image();
-
-    img.onload = () => {
-      URL.revokeObjectURL(objectUrl);
-      try {
-        const width = img.naturalWidth || img.width;
-        const height = img.naturalHeight || img.height;
-        const minSide = Math.min(width, height);
-        const startX = (width - minSide) / 2;
-        const startY = (height - minSide) / 2;
-        const targetSize = Math.min(minSide, targetDimension);
-
-        const canvas = document.createElement("canvas");
-        canvas.width = targetSize;
-        canvas.height = targetSize;
-        const ctx = canvas.getContext("2d");
-
-        if (ctx) {
-          ctx.imageSmoothingEnabled = true;
-          ctx.imageSmoothingQuality = "high";
-          ctx.drawImage(
-            img,
-            startX,
-            startY,
-            minSide,
-            minSide,
-            0,
-            0,
-            targetSize,
-            targetSize
-          );
-          const compressed = canvas.toDataURL("image/jpeg", quality);
-          resolve(compressed);
-          return;
-        }
-      } catch (e) {
-        console.warn("Canvas compression failed, falling back to FileReader", e);
-      }
-
-      // FileReader fallback
-      const reader = new FileReader();
-      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(file);
-    };
-
-    img.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      const reader = new FileReader();
-      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(file);
-    };
-
-    img.src = objectUrl;
-  });
-}
-
 function CreateAccount({ initialUser, onSave, onClose }) {
   const isEditing = Boolean(initialUser && initialUser.username);
 
@@ -111,6 +44,9 @@ function CreateAccount({ initialUser, onSave, onClose }) {
   const [avatar, setAvatar] = useState(
     isEditing ? initialUser?.avatar || null : null
   );
+
+  // Interactive cropper/adjuster state
+  const [imageToAdjust, setImageToAdjust] = useState(null);
 
   const [isSelfieMode, setIsSelfieMode] = useState(false);
   const [selfieStream, setSelfieStream] = useState(null);
@@ -143,23 +79,22 @@ function CreateAccount({ initialUser, onSave, onClose }) {
     onSave(userData);
   }
 
-  // Handle local file upload with auto-resizing & compression
-  async function handleImageUpload(e) {
+  // Handle local file upload: opens cropper/adjuster immediately for perfect circle fit
+  function handleImageUpload(e) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    try {
-      const optimized = await resizeAndCompressImage(file, 360, 360, 0.85);
-      if (optimized) {
-        setAvatar(optimized);
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setImageToAdjust(reader.result);
       }
-    } catch (err) {
-      console.warn("Image upload error", err);
-    } finally {
-      // Clear file input so selecting the same file again triggers onChange
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
+    };
+    reader.readAsDataURL(file);
+
+    // Reset file input so re-selecting triggers change
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   }
 
@@ -185,21 +120,20 @@ function CreateAccount({ initialUser, onSave, onClose }) {
     const video = videoRef.current;
     if (video && video.readyState >= 2) {
       const rawSize = Math.min(video.videoWidth, video.videoHeight);
-      const targetSize = Math.min(rawSize, 360);
       const canvas = document.createElement("canvas");
-      canvas.width = targetSize;
-      canvas.height = targetSize;
+      canvas.width = rawSize;
+      canvas.height = rawSize;
       const ctx = canvas.getContext("2d");
 
       // Center crop & mirror for selfie
-      ctx.translate(targetSize, 0);
+      ctx.translate(rawSize, 0);
       ctx.scale(-1, 1);
       const startX = (video.videoWidth - rawSize) / 2;
       const startY = (video.videoHeight - rawSize) / 2;
-      ctx.drawImage(video, startX, startY, rawSize, rawSize, 0, 0, targetSize, targetSize);
+      ctx.drawImage(video, startX, startY, rawSize, rawSize, 0, 0, rawSize, rawSize);
 
-      const capturedData = canvas.toDataURL("image/jpeg", 0.85);
-      setAvatar(capturedData);
+      const capturedData = canvas.toDataURL("image/jpeg", 0.95);
+      setImageToAdjust(capturedData);
     }
     stopSelfieStream();
   }
@@ -210,6 +144,22 @@ function CreateAccount({ initialUser, onSave, onClose }) {
       setSelfieStream(null);
     }
     setIsSelfieMode(false);
+  }
+
+  // Photo adjuster callbacks
+  function handleOpenAdjuster() {
+    if (avatar) {
+      setImageToAdjust(avatar);
+    }
+  }
+
+  function handleApplyAdjustedCrop(croppedDataUrl) {
+    setAvatar(croppedDataUrl);
+    setImageToAdjust(null);
+  }
+
+  function handleCancelAdjuster() {
+    setImageToAdjust(null);
   }
 
   // Username validation
@@ -304,7 +254,12 @@ function CreateAccount({ initialUser, onSave, onClose }) {
                   </button>
                 </div>
               ) : avatar ? (
-                <div className="avatar-image-ring">
+                <div
+                  className="avatar-image-ring"
+                  onClick={handleOpenAdjuster}
+                  title="Click to adjust photo inside circle"
+                  style={{ cursor: "pointer" }}
+                >
                   <img
                     src={avatar}
                     alt=""
@@ -317,12 +272,18 @@ function CreateAccount({ initialUser, onSave, onClose }) {
                   <button
                     type="button"
                     className="avatar-remove-btn"
-                    onClick={() => setAvatar(null)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAvatar(null);
+                    }}
                     title="Remove photo"
                     aria-label="Remove photo"
                   >
                     ✕
                   </button>
+                  <span className="avatar-adjust-badge" title="Adjust photo in circle">
+                    🔍
+                  </span>
                 </div>
               ) : (
                 /* Completely blank placeholder: nobody's picture is seen */
@@ -350,7 +311,7 @@ function CreateAccount({ initialUser, onSave, onClose }) {
             </div>
 
             <span className="avatar-prompt-text">
-              {avatar ? "Profile photo added" : "Add a profile photo (optional)"}
+              {avatar ? "Profile photo added • tap photo to adjust" : "Add a profile photo (optional)"}
             </span>
 
             {/* Profile Picture Actions */}
@@ -370,6 +331,17 @@ function CreateAccount({ initialUser, onSave, onClose }) {
               >
                 <span>{avatar ? "Change photo" : "Upload photo"}</span>
               </button>
+
+              {avatar && (
+                <button
+                  type="button"
+                  className="avatar-action-btn adjust-crop-btn"
+                  onClick={handleOpenAdjuster}
+                  title="Adjust photo position & zoom in circle"
+                >
+                  <span>Adjust circle 🔍</span>
+                </button>
+              )}
 
               <button
                 type="button"
@@ -483,6 +455,15 @@ function CreateAccount({ initialUser, onSave, onClose }) {
           </footer>
         </form>
       </main>
+
+      {/* Interactive Photo Cropper / Adjuster Modal */}
+      {imageToAdjust && (
+        <ProfilePhotoAdjuster
+          imageSrc={imageToAdjust}
+          onApply={handleApplyAdjustedCrop}
+          onCancel={handleCancelAdjuster}
+        />
+      )}
     </div>
   );
 }
