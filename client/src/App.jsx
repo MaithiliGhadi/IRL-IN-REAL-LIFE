@@ -55,6 +55,24 @@ function App() {
   const [accountMode, setAccountMode] = useState("create");
   const [capturedImage, setCapturedImage] = useState(null);
   const [moments, setMoments] = useState(INITIAL_MOMENTS);
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined"
+      ? window.matchMedia("(max-width: 768px)").matches
+      : false
+  );
+
+  // Keep the WebGL background lighter on phones.
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 768px)");
+    const handleViewportChange = () => setIsMobile(mediaQuery.matches);
+
+    handleViewportChange();
+    mediaQuery.addEventListener?.("change", handleViewportChange);
+
+    return () => {
+      mediaQuery.removeEventListener?.("change", handleViewportChange);
+    };
+  }, []);
 
   const [currentUser, setCurrentUser] = useState(() => {
     try {
@@ -158,19 +176,21 @@ function App() {
 
   return (
     <div className="app-root">
-      <div className="floating-lines-bg-fixed" aria-hidden="true">
-        <FloatingLines
-          enabledWaves={["top", "middle", "bottom"]}
-          lineCount={[6, 8, 7]}
-          lineDistance={[5, 4, 6]}
-          animationSpeed={0.8}
-          interactive={true}
-          bendRadius={5.0}
-          bendStrength={-0.5}
-          parallax={true}
-          parallaxStrength={0.2}
-        />
-      </div>
+      {!cameraOpen && !composerOpen && !createAccountOpen && (
+        <div className="floating-lines-bg-fixed" aria-hidden="true">
+          <FloatingLines
+            enabledWaves={["top", "middle", "bottom"]}
+            lineCount={isMobile ? [2, 3, 2] : [6, 8, 7]}
+            lineDistance={isMobile ? [8, 7, 9] : [5, 4, 6]}
+            animationSpeed={isMobile ? 0.35 : 0.8}
+            interactive={!isMobile}
+            bendRadius={isMobile ? 3.5 : 5.0}
+            bendStrength={isMobile ? -0.25 : -0.5}
+            parallax={!isMobile}
+            parallaxStrength={0.2}
+          />
+        </div>
+      )}
 
       {cameraOpen ? (
         <Camera
