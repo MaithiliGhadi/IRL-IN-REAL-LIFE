@@ -1,12 +1,19 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Camera from "./components/Camera";
 import MomentComposer from "./components/MomentComposer";
 import Feed from "./components/Feed";
 import ProfileModal from "./components/ProfileModal";
 import CreateAccount from "./components/CreateAccount";
 import FloatingLines from "./components/FloatingLines";
+import {
+  ensureAnonymousUser,
+  loadActiveMoments,
+  loadCurrentProfile,
+  publishMoment,
+  saveCurrentProfile,
+  supabaseReady,
+} from "./lib/irlSupabase";
 import "./styles/global.css";
-
 
 const INITIAL_MOMENTS = [
   {
@@ -21,11 +28,7 @@ const INITIAL_MOMENTS = [
     voiceDuration: 7,
     createdAt: new Date().toISOString(),
     expiresIn: "23:41:18",
-    reactions: {
-      feltThis: 4,
-      same: 6,
-      loveThis: 1,
-    },
+    reactions: { feltThis: 4, same: 6, loveThis: 1 },
   },
   {
     id: 102,
@@ -39,16 +42,11 @@ const INITIAL_MOMENTS = [
     voiceDuration: 4,
     createdAt: new Date().toISOString(),
     expiresIn: "21:15:02",
-    reactions: {
-      feltThis: 2,
-      same: 1,
-      loveThis: 8,
-    },
+    reactions: { feltThis: 2, same: 1, loveThis: 8 },
   },
 ];
 
 function App() {
-  // Navigation states: 'home' | 'feed'
   const [activeScreen, setActiveScreen] = useState("home");
   const [cameraOpen, setCameraOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -58,7 +56,6 @@ function App() {
   const [capturedImage, setCapturedImage] = useState(null);
   const [moments, setMoments] = useState(INITIAL_MOMENTS);
 
-  // User account state persisted in localStorage
   const [currentUser, setCurrentUser] = useState(() => {
     try {
       const stored = localStorage.getItem("irl_current_user");
@@ -68,37 +65,89 @@ function App() {
     }
   });
 
-  function handleSaveAccount(userData) {
-    setCurrentUser(userData);
-    try {
-      localStorage.setItem("irl_current_user", JSON.stringify(userData));
-    } catch (e) {
-      console.warn("Could not save to localStorage", e);
+  // Supabase uses an anonymous Auth user so the current UI can stay frictionless.
+  // No email/password is required for the demo account flow.
+  useEffect(() => {
+    if (!supabaseReady()) return;
+
+    let cancelled = false;
+
+    async function bootstrapBackend() {
+      try {
+        await ensureAnonymousUser();
+
+        const [profile, backendMoments] = await Promise.all([
+          loadCurrentProfile(),
+          loadActiveMoments(),
+        ]);
+
+        if (cancelled) return;
+
+        if (profile) {
+          setCurrentUser(profile);
+          localStorage.setItem("irl_current_user", JSON.stringify(profile));
+        }
+
+        if (backendMoments.length > 0) {
+          setMoments(backendMoments);
+        }
+      } catch (error) {
+        console.warn(
+          "Supabase is not ready yet. IRL will continue in local demo mode.",
+          error
+        );
+      }
     }
+
+    bootstrapBackend();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleSaveAccount(userData) {
+    try {
+      const savedUser = supabaseReady()
+        ? await saveCurrentProfile(userData)
+        : userData;
+
+      setCurrentUser(savedUser);
+      localStorage.setItem("irl_current_user", JSON.stringify(savedUser));
+    } catch (error) {
+      console.error("Could not save profile to Supabase:", error);
+      setCurrentUser(userData);
+      localStorage.setItem("irl_current_user", JSON.stringify(userData));
+    }
+
     setCreateAccountOpen(false);
     setActiveScreen("feed");
   }
 
   function handleLogout() {
     setCurrentUser(null);
-    try {
-      localStorage.removeItem("irl_current_user");
-    } catch (e) {
-      console.warn("Could not clear localStorage", e);
-    }
+    localStorage.removeItem("irl_current_user");
     setProfileOpen(false);
   }
 
-  // When photo review screen clicks "use moment →"
   function handleUseMoment(image) {
     setCapturedImage(image);
     setCameraOpen(false);
     setComposerOpen(true);
   }
 
-  // When moment composer finishes sharing
-  function handlePublishMoment(newMoment) {
-    setMoments((prev) => [newMoment, ...prev]);
+  async function handlePublishMoment(newMoment) {
+    try {
+      const savedMoment = supabaseReady()
+        ? await publishMoment(newMoment)
+        : newMoment;
+
+      setMoments((prev) => [savedMoment, ...prev]);
+    } catch (error) {
+      console.error("Could not publish moment to Supabase:", error);
+      // Keep the demo usable even if the Supabase project has not been configured.
+      setMoments((prev) => [newMoment, ...prev]);
+    }
   }
 
   function handleCloseComposer() {
@@ -109,7 +158,6 @@ function App() {
 
   return (
     <div className="app-root">
-      {/* 3D Animated Floating Lines Background for All Pages */}
       <div className="floating-lines-bg-fixed" aria-hidden="true">
         <FloatingLines
           enabledWaves={["top", "middle", "bottom"]}
@@ -144,7 +192,6 @@ function App() {
         />
       ) : (
         <div className="app-shell">
-          {/* Feed View */}
           {activeScreen === "feed" ? (
             <Feed
               moments={moments}
@@ -158,7 +205,6 @@ function App() {
               onBackHome={() => setActiveScreen("home")}
             />
           ) : (
-            /* Home Landing Screen (Matches page 1 of PDF) */
             <main className="irl">
               <header className="irl-header">
                 <span className="irl-live-pill">
@@ -180,16 +226,26 @@ function App() {
                             className="nav-avatar-circle"
                             onError={(e) => {
                               e.currentTarget.style.display = "none";
-                              const fb = e.currentTarget.parentElement?.querySelector(".nav-avatar-circle-placeholder");
+                              const fb = e.currentTarget.parentElement?.querySelector(
+                                ".nav-avatar-circle-placeholder"
+                              );
                               if (fb) fb.style.display = "inline-flex";
                             }}
                           />
                         )}
                         <span
                           className="nav-avatar-circle-placeholder"
-                          style={{ display: currentUser.avatar ? "none" : "inline-flex" }}
+                          style={{
+                            display: currentUser.avatar
+                              ? "none"
+                              : "inline-flex",
+                          }}
                         >
-                          {(currentUser.displayName || currentUser.username || "U")[0]?.toUpperCase() || "U"}
+                          {(
+                            currentUser.displayName ||
+                            currentUser.username ||
+                            "U"
+                          )[0]?.toUpperCase() || "U"}
                         </span>
                       </span>
                       <span className="nav-handle">
@@ -233,7 +289,9 @@ function App() {
                 </button>
 
                 <p className="capture-label">capture a moment</p>
-                <span className="capture-sub-rule">unfiltered • live camera only</span>
+                <span className="capture-sub-rule">
+                  unfiltered • live camera only
+                </span>
               </section>
 
               <footer className="irl-footer">
@@ -247,7 +305,6 @@ function App() {
             </main>
           )}
 
-          {/* Profile Sheet Modal (Pillar 4) */}
           <ProfileModal
             isOpen={profileOpen}
             currentUser={currentUser}
