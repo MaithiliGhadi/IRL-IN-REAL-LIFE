@@ -29,8 +29,8 @@ function Camera({ onClose, onUseMoment }) {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode,
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
           },
           audio: false,
         });
@@ -80,8 +80,16 @@ function Camera({ onClose, onUseMoment }) {
     const video = videoRef.current;
     if (video && video.readyState >= 2 && video.videoWidth > 0) {
       const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      const maxDimension = 1280;
+      const sourceWidth = video.videoWidth;
+      const sourceHeight = video.videoHeight;
+      const scale = Math.min(
+        1,
+        maxDimension / Math.max(sourceWidth, sourceHeight)
+      );
+
+      canvas.width = Math.round(sourceWidth * scale);
+      canvas.height = Math.round(sourceHeight * scale);
 
       const context = canvas.getContext("2d");
       // If user camera (front camera), mirror it naturally
@@ -91,7 +99,8 @@ function Camera({ onClose, onUseMoment }) {
       }
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      const image = canvas.toDataURL("image/jpeg", 0.92);
+      // Keep captured moments light enough for mobile memory, upload, and feed loading.
+      const image = canvas.toDataURL("image/jpeg", 0.82);
       setTimeout(() => setCapturedImage(image), 150);
       return;
     }
