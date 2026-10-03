@@ -15,36 +15,7 @@ import {
 } from "./lib/irlSupabase";
 import "./styles/global.css";
 
-const INITIAL_MOMENTS = [
-  {
-    id: 101,
-    author: "arjun",
-    avatar: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=200&q=80",
-    image: "https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&w=1000&q=80",
-    activity: "studying for tomorrow's exam.",
-    mood: { id: "tired", label: "tired", emoji: "😴" },
-    location: "College",
-    voiceUrl: "https://actions.google.com/sounds/v1/ambiences/coffee_shop.ogg",
-    voiceDuration: 7,
-    createdAt: new Date().toISOString(),
-    expiresIn: "23:41:18",
-    reactions: { feltThis: 4, same: 6, loveThis: 1 },
-  },
-  {
-    id: 102,
-    author: "ananya",
-    avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=200&q=80",
-    image: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=1000&q=80",
-    activity: "went out for chai with my friends.",
-    mood: { id: "happy", label: "happy", emoji: "✨" },
-    location: "Bandra",
-    voiceUrl: "https://actions.google.com/sounds/v1/ambiences/coffee_shop.ogg",
-    voiceDuration: 4,
-    createdAt: new Date().toISOString(),
-    expiresIn: "21:15:02",
-    reactions: { feltThis: 2, same: 1, loveThis: 8 },
-  },
-];
+const INITIAL_MOMENTS = [];
 
 function App() {
   const [activeScreen, setActiveScreen] = useState("home");
