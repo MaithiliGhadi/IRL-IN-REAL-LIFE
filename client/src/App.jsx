@@ -32,7 +32,7 @@ function App() {
       : false
   );
 
-  // Keep the WebGL background lighter on phones.
+  // Phone gets the full visual experience; desktop gets a lighter WebGL setup.
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 768px)");
     const handleViewportChange = () => setIsMobile(mediaQuery.matches);
@@ -151,14 +151,15 @@ function App() {
         <div className="floating-lines-bg-fixed" aria-hidden="true">
           <FloatingLines
             enabledWaves={["top", "middle", "bottom"]}
-            lineCount={isMobile ? [2, 3, 2] : [6, 8, 7]}
-            lineDistance={isMobile ? [8, 7, 9] : [5, 4, 6]}
-            animationSpeed={isMobile ? 0.35 : 0.8}
-            interactive={!isMobile}
-            bendRadius={isMobile ? 3.5 : 5.0}
-            bendStrength={isMobile ? -0.25 : -0.5}
-            parallax={!isMobile}
-            parallaxStrength={0.2}
+            // Mobile: full visual treatment. Desktop: reduced workload.
+            lineCount={isMobile ? [6, 8, 7] : [3, 4, 3]}
+            lineDistance={isMobile ? [5, 4, 6] : [8, 7, 9]}
+            animationSpeed={isMobile ? 0.8 : 0.35}
+            interactive={isMobile}
+            bendRadius={isMobile ? 5.0 : 3.5}
+            bendStrength={isMobile ? -0.5 : -0.25}
+            parallax={isMobile}
+            parallaxStrength={isMobile ? 0.2 : 0}
           />
         </div>
       )}
