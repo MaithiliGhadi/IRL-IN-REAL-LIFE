@@ -182,6 +182,8 @@ function Feed({
                             src={moment.avatar}
                             alt={moment.author}
                             className="author-avatar-img"
+                            loading="lazy"
+                            decoding="async"
                           />
                         ) : (
                           <span className="author-initial">
@@ -210,6 +212,7 @@ function Feed({
                       alt={moment.activity || "IRL moment"}
                       className="moment-frame-img"
                       loading="lazy"
+                      decoding="async"
                     />
                   </div>
 

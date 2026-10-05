@@ -1,54 +1,23 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Camera from "./components/Camera";
 import MomentComposer from "./components/MomentComposer";
 import Feed from "./components/Feed";
 import ProfileModal from "./components/ProfileModal";
 import CreateAccount from "./components/CreateAccount";
 import FloatingLines from "./components/FloatingLines";
+import {
+  ensureAnonymousUser,
+  loadActiveMoments,
+  loadCurrentProfile,
+  publishMoment,
+  saveCurrentProfile,
+  supabaseReady,
+} from "./lib/irlSupabase";
 import "./styles/global.css";
 
-
-const INITIAL_MOMENTS = [
-  {
-    id: 101,
-    author: "arjun",
-    avatar: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=200&q=80",
-    image: "https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&w=1000&q=80",
-    activity: "studying for tomorrow's exam.",
-    mood: { id: "tired", label: "tired", emoji: "😴" },
-    location: "College",
-    voiceUrl: "https://actions.google.com/sounds/v1/ambiences/coffee_shop.ogg",
-    voiceDuration: 7,
-    createdAt: new Date().toISOString(),
-    expiresIn: "23:41:18",
-    reactions: {
-      feltThis: 4,
-      same: 6,
-      loveThis: 1,
-    },
-  },
-  {
-    id: 102,
-    author: "ananya",
-    avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=200&q=80",
-    image: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=1000&q=80",
-    activity: "went out for chai with my friends.",
-    mood: { id: "happy", label: "happy", emoji: "✨" },
-    location: "Bandra",
-    voiceUrl: "https://actions.google.com/sounds/v1/ambiences/coffee_shop.ogg",
-    voiceDuration: 4,
-    createdAt: new Date().toISOString(),
-    expiresIn: "21:15:02",
-    reactions: {
-      feltThis: 2,
-      same: 1,
-      loveThis: 8,
-    },
-  },
-];
+const INITIAL_MOMENTS = [];
 
 function App() {
-  // Navigation states: 'home' | 'feed'
   const [activeScreen, setActiveScreen] = useState("home");
   const [cameraOpen, setCameraOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -57,8 +26,25 @@ function App() {
   const [accountMode, setAccountMode] = useState("create");
   const [capturedImage, setCapturedImage] = useState(null);
   const [moments, setMoments] = useState(INITIAL_MOMENTS);
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined"
+      ? window.matchMedia("(max-width: 768px)").matches
+      : false
+  );
 
-  // User account state persisted in localStorage
+  // Phone gets the full visual experience; desktop gets a lighter WebGL setup.
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 768px)");
+    const handleViewportChange = () => setIsMobile(mediaQuery.matches);
+
+    handleViewportChange();
+    mediaQuery.addEventListener?.("change", handleViewportChange);
+
+    return () => {
+      mediaQuery.removeEventListener?.("change", handleViewportChange);
+    };
+  }, []);
+
   const [currentUser, setCurrentUser] = useState(() => {
     try {
       const stored = localStorage.getItem("irl_current_user");
@@ -68,37 +54,89 @@ function App() {
     }
   });
 
-  function handleSaveAccount(userData) {
-    setCurrentUser(userData);
-    try {
-      localStorage.setItem("irl_current_user", JSON.stringify(userData));
-    } catch (e) {
-      console.warn("Could not save to localStorage", e);
+  // Supabase uses an anonymous Auth user so the current UI can stay frictionless.
+  // No email/password is required for the demo account flow.
+  useEffect(() => {
+    if (!supabaseReady()) return;
+
+    let cancelled = false;
+
+    async function bootstrapBackend() {
+      try {
+        await ensureAnonymousUser();
+
+        const [profile, backendMoments] = await Promise.all([
+          loadCurrentProfile(),
+          loadActiveMoments(),
+        ]);
+
+        if (cancelled) return;
+
+        if (profile) {
+          setCurrentUser(profile);
+          localStorage.setItem("irl_current_user", JSON.stringify(profile));
+        }
+
+        if (backendMoments.length > 0) {
+          setMoments(backendMoments);
+        }
+      } catch (error) {
+        console.warn(
+          "Supabase is not ready yet. IRL will continue in local demo mode.",
+          error
+        );
+      }
     }
+
+    bootstrapBackend();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleSaveAccount(userData) {
+    try {
+      const savedUser = supabaseReady()
+        ? await saveCurrentProfile(userData)
+        : userData;
+
+      setCurrentUser(savedUser);
+      localStorage.setItem("irl_current_user", JSON.stringify(savedUser));
+    } catch (error) {
+      console.error("Could not save profile to Supabase:", error);
+      setCurrentUser(userData);
+      localStorage.setItem("irl_current_user", JSON.stringify(userData));
+    }
+
     setCreateAccountOpen(false);
     setActiveScreen("feed");
   }
 
   function handleLogout() {
     setCurrentUser(null);
-    try {
-      localStorage.removeItem("irl_current_user");
-    } catch (e) {
-      console.warn("Could not clear localStorage", e);
-    }
+    localStorage.removeItem("irl_current_user");
     setProfileOpen(false);
   }
 
-  // When photo review screen clicks "use moment →"
   function handleUseMoment(image) {
     setCapturedImage(image);
     setCameraOpen(false);
     setComposerOpen(true);
   }
 
-  // When moment composer finishes sharing
-  function handlePublishMoment(newMoment) {
-    setMoments((prev) => [newMoment, ...prev]);
+  async function handlePublishMoment(newMoment) {
+    try {
+      const savedMoment = supabaseReady()
+        ? await publishMoment(newMoment)
+        : newMoment;
+
+      setMoments((prev) => [savedMoment, ...prev]);
+    } catch (error) {
+      console.error("Could not publish moment to Supabase:", error);
+      // Keep the demo usable even if the Supabase project has not been configured.
+      setMoments((prev) => [newMoment, ...prev]);
+    }
   }
 
   function handleCloseComposer() {
@@ -109,20 +147,22 @@ function App() {
 
   return (
     <div className="app-root">
-      {/* 3D Animated Floating Lines Background for All Pages */}
-      <div className="floating-lines-bg-fixed" aria-hidden="true">
-        <FloatingLines
-          enabledWaves={["top", "middle", "bottom"]}
-          lineCount={[6, 8, 7]}
-          lineDistance={[5, 4, 6]}
-          animationSpeed={0.8}
-          interactive={true}
-          bendRadius={5.0}
-          bendStrength={-0.5}
-          parallax={true}
-          parallaxStrength={0.2}
-        />
-      </div>
+      {!cameraOpen && !composerOpen && !createAccountOpen && (
+        <div className="floating-lines-bg-fixed" aria-hidden="true">
+          <FloatingLines
+            enabledWaves={["top", "middle", "bottom"]}
+            // Mobile: full visual treatment. Desktop: reduced workload.
+            lineCount={isMobile ? [6, 8, 7] : [3, 4, 3]}
+            lineDistance={isMobile ? [5, 4, 6] : [8, 7, 9]}
+            animationSpeed={isMobile ? 0.8 : 0.35}
+            interactive={isMobile}
+            bendRadius={isMobile ? 5.0 : 3.5}
+            bendStrength={isMobile ? -0.5 : -0.25}
+            parallax={isMobile}
+            parallaxStrength={isMobile ? 0.2 : 0}
+          />
+        </div>
+      )}
 
       {cameraOpen ? (
         <Camera
@@ -144,7 +184,6 @@ function App() {
         />
       ) : (
         <div className="app-shell">
-          {/* Feed View */}
           {activeScreen === "feed" ? (
             <Feed
               moments={moments}
@@ -158,7 +197,6 @@ function App() {
               onBackHome={() => setActiveScreen("home")}
             />
           ) : (
-            /* Home Landing Screen (Matches page 1 of PDF) */
             <main className="irl">
               <header className="irl-header">
                 <span className="irl-live-pill">
@@ -180,16 +218,26 @@ function App() {
                             className="nav-avatar-circle"
                             onError={(e) => {
                               e.currentTarget.style.display = "none";
-                              const fb = e.currentTarget.parentElement?.querySelector(".nav-avatar-circle-placeholder");
+                              const fb = e.currentTarget.parentElement?.querySelector(
+                                ".nav-avatar-circle-placeholder"
+                              );
                               if (fb) fb.style.display = "inline-flex";
                             }}
                           />
                         )}
                         <span
                           className="nav-avatar-circle-placeholder"
-                          style={{ display: currentUser.avatar ? "none" : "inline-flex" }}
+                          style={{
+                            display: currentUser.avatar
+                              ? "none"
+                              : "inline-flex",
+                          }}
                         >
-                          {(currentUser.displayName || currentUser.username || "U")[0]?.toUpperCase() || "U"}
+                          {(
+                            currentUser.displayName ||
+                            currentUser.username ||
+                            "U"
+                          )[0]?.toUpperCase() || "U"}
                         </span>
                       </span>
                       <span className="nav-handle">
@@ -233,7 +281,9 @@ function App() {
                 </button>
 
                 <p className="capture-label">capture a moment</p>
-                <span className="capture-sub-rule">unfiltered • live camera only</span>
+                <span className="capture-sub-rule">
+                  unfiltered • live camera only
+                </span>
               </section>
 
               <footer className="irl-footer">
@@ -247,7 +297,6 @@ function App() {
             </main>
           )}
 
-          {/* Profile Sheet Modal (Pillar 4) */}
           <ProfileModal
             isOpen={profileOpen}
             currentUser={currentUser}
